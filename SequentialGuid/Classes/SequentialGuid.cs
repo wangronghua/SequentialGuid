@@ -21,6 +21,13 @@ namespace SequentialGuid
     private static readonly RNGCryptoServiceProvider RandomGenerator = new RNGCryptoServiceProvider();
     #endregion
 
+
+    //3d81e90b-4b23-05f7-173c-39e55b989aaf
+    //d2c147ba-7c92-4da7-a072-39e55b989ab9
+    //ab4dc8b5-1200-d56e-1612-39e55b989ac3
+    //51b742ae-bbf1-63b0-c64c-39e55b989acd
+    //6cc3fb3f-9a56-f500-bb74-39e55b989ad7
+    //fde6368d-6684-779a-4381-39e55b989ae1
     /// <summary>
     /// Returns a new GUID value which is sequentially ordered when formatted as
     /// a string, a byte array, or ordered by the least significant six bytes of the
@@ -141,6 +148,84 @@ namespace SequentialGuid
       }
 
       return new Guid(guidBytes);
+        }
+
+
+        #region  另外可用方法，还是用上面的性能好些
+        //================================================================
+        //634d348e-37d6-404b-adc0-a8ab0017dbb3
+        //ea04b241-c1d2-4202-94b6-a8ab0017dbb6
+        //e3863e4b-3cd4-4d80-bf2a-a8ab0017dbb9
+        //4322956f-0112-479d-a311-a8ab0017dbbc
+        //d369dc64-4624-4b2b-aafe-a8ab0017dbbf
+        //1e5a7f60-58b9-4d91-9cdf-a8ab0017dbc2
+        ///<summary>
+        /// 返回 GUID 用于数据库操作，特定的时间代码可以提高检索效率
+        /// 
+        /// 与sql生成的一直，缺点是时间没有除10000导致很容易重复，另外生成的性能不够好
+        /// 
+        //与下面sql生成的一致
+        //DECLARE @aGuid UNIQUEIDENTIFIER
+        //SET @aGuid = CAST(CAST(NEWID() AS BINARY(10)) 
+        //+ CAST(GETDATE() AS BINARY(6)) AS UNIQUEIDENTIFIER)
+        /// 
+        /// </summary>
+        /// <returns>COMB (GUID 与时间混合型) 类型 GUID 数据</returns>
+        public static Guid Create_out(SequentialGuidType guidType)
+        {
+            byte[] guidArray = System.Guid.NewGuid().ToByteArray();
+            DateTime baseDate = new DateTime(1900, 1, 1);
+            DateTime now = DateTime.Now;
+            // Get the days and milliseconds which will be used to build the byte string 
+            TimeSpan days = new TimeSpan(now.Ticks - baseDate.Ticks);
+            TimeSpan msecs = new TimeSpan(now.Ticks - (new DateTime(now.Year, now.Month, now.Day).Ticks));
+
+            // Convert to a byte array 
+            // Note that SQL Server is accurate to 1/300th of a millisecond so we divide by 3.333333 
+            byte[] daysArray = BitConverter.GetBytes(days.Days);
+            byte[] msecsArray = BitConverter.GetBytes((long)(msecs.TotalMilliseconds / 3.333333));
+
+            // Reverse the bytes to match SQL Servers ordering 
+            Array.Reverse(daysArray);
+            Array.Reverse(msecsArray);
+
+            // Copy the bytes into the guid 
+            Buffer.BlockCopy(daysArray, daysArray.Length - 2, guidArray, guidArray.Length - 6, 2);
+            Buffer.BlockCopy(msecsArray, msecsArray.Length - 4, guidArray, guidArray.Length - 4, 4);
+
+            return new System.Guid(guidArray);
+        }
+        //================================================================
+        /// <summary>
+        /// 从 SQL SERVER 返回的 GUID 中生成时间信息
+        /// </summary>
+        /// <param name="guid">包含时间信息的 COMB </param>
+        /// <returns>时间</returns>
+        public static DateTime GetDateFromComb(System.Guid guid)
+        {
+            DateTime baseDate = new DateTime(1900, 1, 1);
+            byte[] daysArray = new byte[4];
+            byte[] msecsArray = new byte[4];
+            byte[] guidArray = guid.ToByteArray();
+
+            // Copy the date parts of the guid to the respective byte arrays. 
+            Array.Copy(guidArray, guidArray.Length - 6, daysArray, 2, 2);
+            Array.Copy(guidArray, guidArray.Length - 4, msecsArray, 0, 4);
+
+            // Reverse the arrays to put them into the appropriate order 
+            Array.Reverse(daysArray);
+            Array.Reverse(msecsArray);
+
+            // Convert the bytes to ints 
+            int days = BitConverter.ToInt32(daysArray, 0);
+            int msecs = BitConverter.ToInt32(msecsArray, 0);
+
+            DateTime date = baseDate.AddDays(days);
+            date = date.AddMilliseconds(msecs * 3.333333);
+
+            return date;
+        }
+        #endregion
+
     }
-  }
 }
